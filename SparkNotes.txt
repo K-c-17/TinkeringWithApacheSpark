@@ -1,0 +1,359 @@
+SPARK RDD Notes:
+    1.  Spark Context was an entry point for programming with RDD and connecting to Spark Cluster. With introduction of Spark 2.0
+        SparkSession became the entry point of programming with DataFrame and DataSet.
+    2.  reduceByKey() and mapValues() are different from each other in the sense that reduceByKey basically aggregated things on the key level.
+        So at the end of it we have unique keys combination. mapValues() only lets you do the operation on the values by keeping the keys as it is.
+    2.5.    The Spark or PySpark groupByKey() is the most frequently used wide transformation operation that involves shuffling of data across the executors 
+            when data is not partitioned on the Key. It takes key-value pairs (K, V) as an input, groups the values based on the key(K), and generates a dataset of KeyValueGroupedDataset(K, Iterable) pairs as an output.
+
+            Also, when we are dealing with large datasets then reduceByKey is preferred over groupByKey since, reduceByKey() results in less shuffling of data as Spark knows it can combine output with a common key 
+            on each partition before shuffling the data.
+    3.  The parameters inside the reduceByKey() function/action will be the 2,3,4...values of the same key.
+                        eg. rdd=    (1,(1,2))
+                                    (1,(1,2))
+                                    (2,(3,2))
+                                    (2,(1,3))
+                            rdd1= rdd.reduceByKey(lambda x,y: (x[0],y[0],x[1],y[1]))
+    4.  mapValues() only has one argument in its lambda function whereas reduceByKey() has two argument in it.
+    5.  DataFrame contains Row Objects. It can have schema and it leads to more efficient storage.
+    6.  DataFrame can read and write to JSON, Hive, Parquet, csv etc. t can communicate with JDBC/ODBC interfaces and also with Tableau
+    7.  SparkSession is an object inside the pyspark.sql .  ss=SparkSession.builder.appName("SparkSQL").getOrCreate()
+    8.  If inputData is a SparkDataFrame then you can create a temporary view on it which you can consider as a kind of database table.
+        This can be achieved by this command:
+                        inputData.createOrReplaceTempView("myStructedStuff")
+        Now I will have myStructedStuff as a virtual database table and I can run SQL queries on it.
+        eg: myResultDataFrame= ss.sql("SELECT foobar from myStructedStuff order by foobar")
+
+        Also, you might come across: RegisterTempTable("tableName")         [registerTempTable is a part of the 1.x API and has been deprecated in Spark 2.0.]
+
+    9. Some commands that you can execute on a dataframe: df.show(), df.select("columnname"), df.filter(df("columnname")>200), 
+        df.groupBy(df("columnname")).mean(), df.rdd().map(mapperFunction)
+    10. DataFrame vs DataSets. DataSet is more of a scala thing. A DataFrame is really a DataSet of Row objects.
+    11. DataSets can wrap known, typed data too.
+    12. We can define UDF using spark SQL
+        from pyspark.sql.types import IntegerType
+
+        def square(x):
+            return x*x
+        spark.udf.register("square", square, IntegerType())
+        df=spark.sql("Select square('columnname') from tableName")
+    13. Every SparkSession object has sparkContext method available to it through which it can load a unstrutured
+        (csv, txt, etc file) into a RDD. It will not create a Spark DataFrame as we are using the sparkContext interface here and not the SparkSession that is created using the spark sql.
+        lines=spark.sparkContext.textFile("fakeFriends.csv")
+    14. Use of the Row function. It is used to output a row object which comprises of the name of the column and its value.
+        Eg. Row(ID=column_value1,  name=column_value2,.......)
+        It is used especially when we have ingested unstructured data into a RDD and we want to make it into a Spark DataFrame.
+        Remember a DataFrame is a basically a dataset of row objects.
+    15. How to change a dataset of Row objects into a DataFrame.
+        eg. spark.createDataFrame(<dataset_of_row_object>).cache()
+    16. cache() is used to keep a DataFrame in memory in case you are going to perform a bunch of operations on it.
+    17. collect() works to collect (it is an action) both the RDD as well as the DataFrame objects.
+    18. Difference between show() and collect(). Show() just shows you the result in a tabular format whereas collect() get you the entire dataframe (a collections of row object)
+    19. spark.read is used to ingest structured data into a spark dataframe.
+        eg. people=spark.read.option("header","true").option("inferSchema","true").csv("file_name")
+        All inferSchema foes is the it infers how many number of columns are there and what will be there datatype
+        Inorder to give the names to the columns we need to use the option("header","true")
+    20. df.select('column_name') basically gives a new dataframe with just that column in it.
+    21. .agg() function is basically used on a groupBy'ed dataframe and aggreated the columns in every group.
+        Eg: c.agg({'ID':'sum'}).show()
+        c can be something like df.groupBy('Name')
+    22. from pyspark.sql import functions as func
+        This func then can be used for getting multiple aggregation functions 
+        eg.func.round(), func.avg(), etc.
+    23. Alias of PySpark DataFrame column changes the name of the column without changing the type and the data
+        Eg. df.select('age',col('lang').alias('language')).show()
+            df.groupBy('age').count().alias('ageCount').sort('age').show()
+            df.groupBy('age').agg(avg('friends').alias("Average Friends)).orderBy(col("Average Friends").desc())
+
+SPARK SQL Notes:
+
+    1.  You can use either sort() or orderBy() function of PySpark DataFrame to sort DataFrame by ascending or descending order based on single or multiple columns.
+                
+                    df.sort(df.department.asc(),df.state.asc()).show(truncate=False)
+                    df.sort(col("department").asc(),col("state").asc()).show(truncate=False)
+                    df.orderBy(col("department").asc(),col("state").asc()).show(truncate=False)
+
+    2.  .show(truncate=False) is used to show the full cotents of a column in the spark dataframe.
+    3.  Some import functions from the pyspark.sql.functions module
+            functions.explode() -similar to flatmap; explodes columns into rows
+            functions.split() - used to convert a delimited string column into an array
+            fucntions.lower() - to change the case to lower case
+    4. To pass a column name as a parameter:
+        func.split(df.columnName,"\\W+")
+        filter(df.word != "")
+        func.col("colName")
+    5.  DataFrame work best with the structured data and is really not meant for the unstructured data.
+    6.  If you load unstructured data into a dataframe then you will just have Row objects with a column name of "value" for each line of text
+    7.  For loading unstructured data RDD will be the best approach.
+    8.  Once the data is loaded as RDD then you can convert that into data frame at a later stage. 
+    9.  func.split(<stringColumn>,"\\W+") this splits the <stringColumn> into an array wherever it encounters a values that is not a word character (one or more time)
+    10. func.explode(<array>) Returns a new row for each element in the given array or map. Uses the default column name col for elements in the array and key and value for elements in the map unless specified otherwise.
+        <array> can be say an output of this : func.split(<stringColumn>,"\\W+")
+    11. df.filter() is an mutable operation that mean the df gets modified post this command 
+    12. To rename a column of a dataframe :
+            withColumnRenamed(existingName, newNam)
+            df.withColumnRenamed("dob","DateOfBirth").printSchema()
+    13. functions.lower(<name of Colum>) is used to change the case of the column into lower case.
+        You also need to alias the column with a name once you change its case.
+            For eg. functions.lower(df.<columnName>).alias("LowerCaseWords")
+    14. StructType is basically a class of the schema type. It is passed an list of different StrucField() object that in turn has parameters of Column name, Column type, if we allow NULL or not.
+        For eg.    schema=StructType([ \
+                    StructField("stationID",StringType(),True), \
+                    StructField("date",IntegerType(),True), \
+                    StructField("measure_type",StringType(),True), \
+                    StructField("temperature",StringType(),True)])
+    15. spark.read.schema(schema).csv("path of the schema")
+        df = spark.createDataFrame(data=data,schema=schema)
+         can be used to ingest an unstructured file with a schema.
+    16. Putting an action over a data frame is an easy way to debug your spark code. for eg. keep show() to check if the transformations mentioned above are working properly or not.
+        But do make sure to delete all the unecessary actions in the script before putting it in production.
+    17. withColumn() is a transformation function of DataFrame which is used to change the value, convert the datatype of an existing column, create a new column, and many more.
+            For eg.     df.withColumn("salary",col("salary").cast("Integer")).show()
+                        df.withColumn("salary",col("salary")*100).show()
+    18. StructType is a collection of StructField’s that defines column name, column data type, boolean to specify if the field can be nullable or not and metadata.
+    19. The data skew in Spark basically means that the data parititions are being unevenly distributed on the worker nodes.
+        To check the number of rows across different partitions, we use the following commands:
+                import pyspark.sql.functions as F
+                df.groupBy(F.spark_partition_id()).count().show()
+        Incase you want to see the data in each partition:
+                df.rdd.glom().collect()
+                Note: .glom() returns a list of lists
+    20. For ingesting a unstructured csv data file that is tab delimited into a spark data frame we do:
+        spark.read.option("sep","\t").schema(schema).csv("")
+    21. For sorting or ordering a df by a column in descending order another popular syntax is:
+        .orderby(func.desc("<name  of col"))
+    22. Use sc.broadcast() to ship off what ever you want to executor and use .value() to get the object back.
+    23. import codecs
+        : is used to load the u.item file locally from our driver script before broadcasting it out.
+    24. Syntax for broadcasting:
+        ss.SparkContext.broadcast(locally defined function name)        [it is important to note that broadcast is a function in the SparkContext and not in spark session.]
+        nameDict=spark.sparkContext.broadcast(loadMovieName())          [Here we are esentially broadcasting whatever loadMovieName function is returning to us.]
+                                                                        [Please note that nameDict is an broadcast object and the actual dictionary]
+        nameDict.value               --> This gives the underlying dictionary that is there in the nameDict broadcast object.
+        lookupNameUDF=func.udf(function created using the nameDict.value)
+        moviesWithNames=movieCounts.withColumn("MovieTitle",lookupNameUDF(func.col("movieID)))
+    25.  "with" statement is used in exception handling to make the code cleaner and much more readable. It simplifies the management of common resources like file streams.
+            For eg:
+                    with open('file_path', 'w') as file:
+                    file.write('hello world !')
+            Without "with" statement:
+                    file = open('file_path', 'w')
+                    file.write('hello world !')
+                    file.close()
+        Notice that unlike the first two implementations, there is no need to call file.close() when using with statement. The with statement itself ensures proper acquisition and release of resources. 
+        An exception during the file.write() call in the first implementation can prevent the file from closing properly which may introduce several bugs in the code, i.e. many changes in files do not go into effect until the file is properly closed. 
+        The second approach in the above example takes care of all the exceptions but using the with statement makes the code compact and much more readable.
+    26. In order to create mutiple new column in a spark data frame please use the following:
+            actual = df.select(["*", lit("val1").alias("col1"), lit("val2").alias("col2")])
+            actual.show()
+            PySpark SQL functions lit() and typedLit() are used to add a new column to DataFrame by assigning a literal or constant value. Both these functions return Column type as return type.
+    27. functions.size()        --> returns the length of the array or map stored in the column.
+    28. The string split operation has two parametes:
+            str_var.split(sep,max_splits)
+            s_lines = 'one\ntwo\nthree\nfour'
+            print(s_lines.split('\n', 1))
+            ['one', 'two\nthree\nfour']
+        This is especially helpful when your delimiter is coming at multiple points in a string and you want to split your string into just two components
+    29. .strip(),lstrip(),rstrip() are three methods of triming a string in python.
+        For eg. "    My name is kshitij".lstrip() --> "My name is kshtij"
+    30. Breadth First Search is an algorithm to search through a graph and basically find the degree of seperation/distance between two nodes.
+    31. An accumulator allows many executors to increment a shared variable:
+        For eg. 
+            hitCounter=sc.accumulator(0)            --> initializing an accumulator object with an initial value of 0
+            hitCounter.add(1)                       --> Adds 1 to the hitCounter accumulator variable
+    32. Anytime you will perform mroe than one action on a dataframe you should cache it. Otherwise spark may end up re-evaluating the entire data frame all over again.
+    33. Use .cache() or .persist() to do this.
+        Difference between cache and persist is that Persist() lets you cache it to disk instead of just memory, just in case a node fails or something.
+        For eg. df.persist(StorageLevel.MEMORY_ONLY)
+                df.persist(StorageLevel.MEMORY_AND_DISK)
+                df.persist(StorageLevel.DISK_ONLY)
+    34. Use of .master("local[*]") in spark session is that we want to use all the cores in our local machine to do the subsequent operations in our spark script
+    35. Self Join Syntax:
+                            moviePairs = ratings.alias("ratings1") \
+                                        .join(ratings.alias("ratings2"), (func.col("ratings1.userId") == func.col("ratings2.userId")) \
+                                            & (func.col("ratings1.movieId") < func.col("ratings2.movieId"))) \ 
+                                        .select(func.col("ratings1.movieId").alias("movie1"), \
+                                        func.col("ratings2.movieId").alias("movie2"), \
+                                        func.col("ratings1.rating").alias("rating1"), \
+                                        func.col("ratings2.rating").alias("rating2"))
+    36. func.when().otherwise()
+        For eg.     result = calculateSimilarity \
+                        .withColumn("score", \
+                            func.when(func.col("denominator") != 0, func.col("numerator") / func.col("denominator")) \
+                                .otherwise(0) \
+                        ).select("movie1", "movie2", "score", "numPairs")
+    37. Syntax for joining two dataframes:
+        empDF.join(deptDF,empDF.emp_dept_id ==  deptDF.dept_id,"inner") \
+            .show(truncate=False)
+        empDF.join(deptDF,empDF.emp_dept_id ==  deptDF.dept_id,"outer") \
+            .show(truncate=False)
+        empDF.join(deptDF,empDF.emp_dept_id ==  deptDF.dept_id,"full") \
+            .show(truncate=False)
+        empDF.join(deptDF,empDF.emp_dept_id ==  deptDF.dept_id,"fullouter") \
+            .show(truncate=False)
+    38. sample(withReplacement, fraction, seed=None)
+        fraction – Fraction of rows to generate, range [0.0, 1.0]. Note that it doesn’t guarantee to provide the exact number of the fraction of records.
+        seed – Seed for sampling (default a random seed). Used to reproduce the same random sampling.
+        withReplacement – Sample with replacement or not (default False).
+    39. In AWS to run a spark job, we need to connect to an EC2 (Elastic Compute Cloud) instance (Master node) on the AWS cluster.
+    40. m3.xlarge instances will be used if you want to start an EMR service and run Spark on top of that. It has 4 vcores and 15 GB of memory on each node.
+    41. EC2 service is the underlying service that EMR uses to spin up a cluster on which we can run spark.
+    42. We need to download a pem file from AWS console and then use the putty gen to create a .ppk file out of it. Add that .ppk file into your putty SSH section and then simply login into the hostname that AWS gives you once the cluster is spun up.
+        .ppk file is needed when you want to ssh from a windows server to a linux server (can be the master node of an AWS cluster as well)
+        .pem file is needed when you want to ssh form a unix/mac server to a linux server (can be the master node of an AWS cluster as well)
+
+        Partitioning of dataset in spark:
+
+    43. We can use the .partitionBy() on an RDD before running a large operation that benefits from parititioning.
+        Join(),cogroup(),groupWith(),join(),leftOuterJoin(),rightOuterJoin(),groupByKey(),reduceByKey(),combineByKey()
+        and other operations....can be used post parititioning the data.
+
+        All of these operations will preserve the partitioning in their results as well.
+    44. Also, the number of partitions that one is supposed to do of a spark dataset actually depends on the number of executor nodes that are there in the spark cluster.
+    45. Too few partitions ---> Won't be able to utilize your cluster fully. It won't be able to spread the data out.
+        Too many paritions ---> This will result in too much overhead from shuffling the data.
+        Keep as many parition as you have cores, or executors that fit within you available memory.
+    46. parititionBy(100) is a good place to start to perfrom big operations.   
+    47. For eg. ratingsPartitioned = ratings.partitionBy(100)
+        This will partition the dataset into 100 partitions.
+        Actions don't change the existing number of paritions on an rdd....however transformations nullify the old parititons on the rdd.
+    
+    
+    48. We usually use the .filter(func) or rdd.map(func) to change the exisitng structure of our key,value pair rdd to another desired key,value pair.
+    49. s3: Simple Storage service
+    50. While running the script on an AWS cluster we should keep the SparkConf() object empty during its initialization as we will pass the information about the master
+        node, cluster run mode via the spark-submit script via the CLI. For eg. if we keep the master as 'local' and not the "YARN" while running it on the cluster then
+        that will only run on the master node and it will not be running on the cluster AT ALL.
+    51. Just use an empty, defult SparkConf in your driver - this way, we will use the defaults EMR sets up instead, as well as any CLI options you pass into spark-submit 
+        from your master node.
+    52. Sample spark-submit command:
+        spark-submit --executor-memory 1g MovieSimilarities.py 260
+    53. The location of the IAM user in AWS Console can affect the type of EC2 instances available for the Cluster.
+    54. The number of nodes that you specify while requesting an AWS cluster =3 (One out of these 3 will be our master and rest will be executors)
+    
+
+    Troubleshooting the Spark running on cluster:
+
+    55. The master node of Spark runs a console on port 4040. Spark Console basically provides a UI framework that let's you know what is going on with different executor nodes.
+    56. If you have local network access to your master node on you cluster then you should be able to connect with Spark UI at 4040 port.
+    57. Where to see the logs of a spark job:
+        In standalone mode, they are in the web UI
+        In YARN though, the logs are distributed. You need to collect them after the fact using 
+                            yarn logs -applicationID <appID>
+    58. Whenever your executors will start to show the error "Executors failing to issue heartbeats", then Spark will try to destory those executors and try to create new ones, but after about 4 tries 
+        it will give up and your entire job will fail. Therefore the "Fault Tolerance" of Hadoop will really not save you here as the number of re-spawn of the executor is limited.
+    59. To add python package that are not pre-loaded on EMR:
+        1.  Use the pip command in EMR to get what you need on each worker node.
+        2.  Use -py-files with spark-submit to add individual libraries that are on master. But here also if any of the py files is using an obscure package that is not 
+            installed on your master node then that .py file will not be sourced.
+        3.  Try avoid using obscure .py packages.
+
+
+
+Machine Learning with Spark MLLib:
+
+
+    1.  Spark ML (older one that used RDD was named MLLib) provides a wide variety of capablitties to implement different ML algorithms in a distributed processing setups.
+    2.  "Advanced Analytics with Spark" is a good book by O'Reilly that can be used to learn how to implement ML in Spark.
+    3.  "Alternating Least Square" ML Model is used to make the movie recommendations systems.
+    4.  In case you have just a value for a variable and you want to construct a df from that you can do this:
+        userID = int(sys.argv[1])
+        userSchema = StructType([StructField("userID", IntegerType(), True)])
+        users = spark.createDataFrame([[userID,]], userSchema)
+    5.  sys.argv[1] is the second parameter that we will be providing while writing the spark-submit command. sys.argv[0] will be the name of the file name itself.
+    6.  Example of implementation of createDataFrame function:
+        df = spark.createDataFrame(data=data2,schema=schema)
+
+        Here the data2 is actually supposed to be a collection of rows.
+        For eg.             data2 = [("James","","Smith","36636","M",3000),
+                                        ("Michael","Rose","","40288","M",4000),
+                                        ("Robert","","Williams","42114","M",4000),
+                                        ("Maria","Anne","Jones","39192","F",4000),
+                                        ("Jen","Mary","Brown","","F",-1)
+                                    ]
+    6.5 One more way of converting the spark RDD to a sprak DF is by usign the toDF function:
+        colNames=["label","features"]
+        df=data.toDF(colNames)
+            Here data is a spark rdd containing row objects that have two values in them.
+    7.  Implementation of the ALS model for movie recommendations:
+        recommendations=model.recommendForUserSubset(<df>,<number of movies to recommend>).collect()
+
+            <df> should be a spark df containing the user id in a single column.
+
+        The "recommendations" variable will be a list of tuple: (userID,[Row(movieID,rating), Row(movieID,rating)....])
+    8.  The variance is defined as the average of the squared distance from each point to the mean.
+    9.  Standard Deviation is the underroot of the variance. It is used to analyze the dispersion of the data points from the mean value.
+    10. Spark using the Stochastic Gradient Descent under the hood while implementing the Liner Regression Model. SCD is friendlier to multi-dimensional data as it looks for the contours
+        in higher dimensions.
+    11.     DataFrame.randomSplit(weights, seed=None)[source]
+                Randomly splits this DataFrame with the provided weights.
+            For eg.    trainTest = df.randomSplit([0.5, 0.5])
+                        trainingDF = trainTest[0]
+                        testDF = trainTest[1]
+    12. How to implement a Linear Regression model in Spark:
+            lir = LinearRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
+
+            # Train the model using our training data
+            model = lir.fit(trainingDF)
+
+            # Now see if we can predict values in our test data.
+            # Generate predictions using our linear regression model for all features in our
+            # test dataframe:
+            fullPredictions = model.transform(testDF).cache()
+            Here the predicted value will be shown in a separate column by the name of "Prediction"
+    13. In order to zip two rdd (each containing just one column) we can do this:
+        zippedRdd = rdd1.zip(rdd2).collect()
+    14. Vector Assmebler is used to convert a multi-column data frame into a format that is suitable for the 
+        DecisionTreeRegressor Model.
+        For eg. assembler=VectorAssembler().setInputCols(["col1","col2",...]).setOutputCol("nameofthevectoryouwanttogive")
+                df=assembler.transform(data).select("labelColumnName","nameofthevectoryouwanttogive")
+        
+    15. Implementing a DecisionTreeRegressor:
+        pyspark.ml.regression.DecisionTreeRegressor(*, featuresCol: str = 'features', labelCol: str = 'label', predictionCol: str = 'prediction', maxDepth: int = 5,......)
+        Here    featuresCol will consist of the name of the feature vector column.
+                labelCol will consist of the name of the label column.
+
+Spark Streaming:
+
+
+    1. Two of the boxes that sit on top of Spark Core are Spark SQL and Spark ML. The other two boxes are Spark Streaming and GraphX.
+    2. Spark Streaming can be fed data from some port, Amazon Kinesis, HDFS, Kafka, Flume and others.
+    3. "Checkpointing" stores state of disk periodically for fault tolerance.
+    3.5 A "Dstream" object breaks up the stream into distinct RDD's.
+    4. Implementing the streaming code:
+        ssc=StreamingContext(sc,1)              sc: sparkContext     ; 1 : We will be taking 1 sec worth of data and making an rdd out of it and process it seperately.
+    5.  You need to kick of the job explicitly:
+        ssc.start()                 --> start the stream
+        ssc.awaitTermination()      --> go on and run this forever until I tell you to stop
+    6.  What is the difference between print() and pprint() in Python ?
+            pprint() function also has similar functionality. But the only difference is in the way it prints complex data structures. 
+            The normal print() function prints the entire content in a single line. 
+            For eg. from pprint import pprint
+                    pprint(df)
+    7.  "Windowed operations"  can combine resutls from multiple batches over some sliding time window.
+        window(),reduceByWindow() and reduceByKeyAndWindow() are some of the functions that can help in doing this.
+    8.  updateStateByKey()  --> You can maintain a arbitrary state across may batches as time goes on.
+    9.  Structured Streaming is the new solution in data streaming. The idea here is that we deal with a df that keep expanding as new stream comes in.
+    10. As new data arrvies in the stream , new rows are appended in the dataframe.
+    11. In Spark Structures streaming we define the spark Session like this:
+        spark=SparkSession.builder.appName("SparkStructuredStreaming").getOrCreate()                --> Here getOrCreat() will actually help in a situation when we close the streaming session unexpectedly.
+                                                                                                        This will help us in getting back the spark session and since ther are checkpoints stored by the spark session we can resume from where we left.
+    12. To monitor the logs directory for new log data and read in the raw lines as accessLines we do:
+        acessLines=spark.readStream.text("logs")
+    13. To kick off our streaming query, dumping results to the console we do:
+        query=(aggDf.writeStream.outputMode("complete").format("console").queryName("counts").start())
+        #Run forever until terminated
+        query.awaitTermination()
+    14. A windowed operation looks bakc over some period of time. The "slide interval" defines how often we evaluate a window.
+    15. In Windowed operations we have a Trigger and an Interval,
+        Trigger/Slide (say 5min): Takes the snapshot of a window after 5min. So the slid happens every 5 mins.
+        Interval (say 10min): Takes the snapshot of 10min window after 5min.
+    16. This will result in a growing dataframe that consist of every possible window with every possible slide interval over time.
+    17. Implementation of the Window operation in spark structured streaming:
+        dataset.groupBy(func.window(func.col("timestampColumnName")),windowDuration="10 minutes",slideDuration="5 minutes"),func.col("columnWeAreGroupingBy")   --> timestampColumnName: timestamp column that you are basing your windows on.
+
+        So, dataset.groupBy(func.window(parm1,parm2,parm3),parm4)
+
+
+Book Recommendations:
+    1.  OReily Series: Learning Spark, Advanced Analytics With Spark (for ML and Data Mining)
